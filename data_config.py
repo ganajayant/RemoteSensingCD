@@ -7,10 +7,10 @@ class DataConfig:
         self.data_name = data_name
         if data_name == 'LEVIR':
             self.label_transform = "norm"
-            self.root_dir = '/Users/ganajayantsigadam/Documents/Data/BTP/TransGAN/Dataset_256/LEVIR-CD-256/'
+            self.root_dir = r'/home/jayants/LEVIR-CD256'
         elif data_name == 'DSIFN':
             self.label_transform = "norm"
-            self.root_dir = '/Users/ganajayantsigadam/Documents/Data/BTP/TransGAN/Dataset_256/DSIFN-CD-256/'
+            self.root_dir = r''
         elif data_name == 'WHU':
             self.label_transform = "norm"
             self.root_dir = ''

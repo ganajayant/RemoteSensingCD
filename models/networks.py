@@ -27,7 +27,7 @@ def get_scheduler(optimizer, args):
 
     Parameters:
         optimizer          -- the optimizer of the network
-        args (option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions．　
+        args (option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions.
                               opt.lr_policy is the name of learning rate policy: linear | step | plateau | cosine
 
     For 'linear', we keep the same learning rate for the first <opt.niter> epochs
