@@ -139,15 +139,15 @@ def define_G(args, init_type='normal', init_gain=0.02, gpu_ids=[]):
 
     elif args.net_G == 'base_transformer_pos_s4':
         net = BASE_Transformer(input_nc=3, output_nc=2, token_len=4, resnet_stages_num=4,
-                               with_pos='learned')
+                               with_pos='learned', reduction_ratio=1, kernel_cbam=3, use_cbam_block=True, use_cbam_class=True)
 
     elif args.net_G == 'base_transformer_pos_s4_dd8':
         net = BASE_Transformer(input_nc=3, output_nc=2, token_len=4, resnet_stages_num=4,
-                               with_pos='learned', enc_depth=1, dec_depth=8)
+                               with_pos='learned', enc_depth=1, dec_depth=8, reduction_ratio=1, kernel_cbam=3, use_cbam_block=True, use_cbam_class=True)
 
     elif args.net_G == 'base_transformer_pos_s4_dd8_dedim8':
         net = BASE_Transformer(input_nc=3, output_nc=2, token_len=4, resnet_stages_num=4,
-                               with_pos='learned', enc_depth=1, dec_depth=8, decoder_dim_head=8)
+                               with_pos='learned', enc_depth=1, dec_depth=8, decoder_dim_head=8, reduction_ratio=1, kernel_cbam=3, use_cbam_block=True, use_cbam_class=True)
 
     elif args.net_G == 'ChangeFormerV1':
         net = ChangeFormerV1()  # ChangeFormer with Transformer Encoder and Convolutional Decoder
@@ -205,7 +205,7 @@ def define_G(args, init_type='normal', init_gain=0.02, gpu_ids=[]):
 
 class ResNet(torch.nn.Module):
     def __init__(self, input_nc, output_nc,
-                 resnet_stages_num=5, backbone='resnet18',
+                 resnet_stages_num=5, backbone='resnet18', reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False,
                  output_sigmoid=False, if_upsample_2x=True):
         """
         In the constructor we instantiate two nn.Linear modules and assign them as
@@ -215,13 +215,13 @@ class ResNet(torch.nn.Module):
         expand = 1
         if backbone == 'resnet18':
             self.resnet = models.resnet18(pretrained=True,
-                                          replace_stride_with_dilation=[False, True, True])
+                                          replace_stride_with_dilation=[False, True, True], reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam, use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class)
         elif backbone == 'resnet34':
             self.resnet = models.resnet34(pretrained=True,
-                                          replace_stride_with_dilation=[False, True, True])
+                                          replace_stride_with_dilation=[False, True, True], reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam, use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class)
         elif backbone == 'resnet50':
             self.resnet = models.resnet50(pretrained=True,
-                                          replace_stride_with_dilation=[False, True, True])
+                                          replace_stride_with_dilation=[False, True, True], reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam, use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class)
             expand = 4
         else:
             raise NotImplementedError
@@ -301,10 +301,11 @@ class BASE_Transformer(ResNet):
                  pool_mode='max', pool_size=2,
                  backbone='resnet18',
                  decoder_softmax=True, with_decoder_pos=None,
-                 with_decoder=True):
+                 with_decoder=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=True, use_cbam_class=True):
         super(BASE_Transformer, self).__init__(input_nc, output_nc, backbone=backbone,
                                                resnet_stages_num=resnet_stages_num,
                                                if_upsample_2x=if_upsample_2x,
+                                               reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam, use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class
                                                )
         self.token_len = token_len
         self.conv_a = nn.Conv2d(32, self.token_len, kernel_size=1,

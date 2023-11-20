@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.model_zoo import load_url as load_state_dict_from_url
 
+from cbam import CBAM
 # from torchvision.models.utils import load_state_dict_from_url
 
 
@@ -38,7 +39,7 @@ class BasicBlock(nn.Module):
     expansion = 1
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
-                 base_width=64, dilation=1, norm_layer=None):
+                 base_width=64, dilation=1, norm_layer=None, reduction_ratio=1, kernel_cbam=3, use_cbam=True):
         super(BasicBlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -49,6 +50,7 @@ class BasicBlock(nn.Module):
             dilation = 1
             # raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.use_cbam = use_cbam
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
@@ -56,6 +58,10 @@ class BasicBlock(nn.Module):
         self.bn2 = norm_layer(planes)
         self.downsample = downsample
         self.stride = stride
+
+        if self.use_cbam:
+            self.cbam = CBAM(n_channels_in=self.expansion*planes,
+                             reduction_ratio=reduction_ratio, kernel_size=kernel_cbam)
 
     def forward(self, x):
         identity = x
@@ -69,7 +75,8 @@ class BasicBlock(nn.Module):
 
         if self.downsample is not None:
             identity = self.downsample(x)
-
+        if self.use_cbam:
+            out = self.cbam(out)
         out += identity
         out = self.relu(out)
 
@@ -86,8 +93,9 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
-                 base_width=64, dilation=1, norm_layer=None):
+                 base_width=64, dilation=1, norm_layer=None, reduction_ratio=1, kernel_cbam=3, use_cbam=True):
         super(Bottleneck, self).__init__()
+        self.use_cbam = use_cbam
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.)) * groups
@@ -101,6 +109,10 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
+
+        if self.use_cbam:
+            self.cbam = CBAM(n_channels_in=self.expansion*planes,
+                             reduction_ratio=reduction_ratio, kernel_size=kernel_cbam)
 
     def forward(self, x):
         identity = x
@@ -118,7 +130,8 @@ class Bottleneck(nn.Module):
 
         if self.downsample is not None:
             identity = self.downsample(x)
-
+        if self.use_cbam:
+            out = self.cbam(out)
         out += identity
         out = self.relu(out)
 
@@ -129,7 +142,7 @@ class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None, strides=None):
+                 norm_layer=None, strides=None, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False):
         super(ResNet, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -140,6 +153,10 @@ class ResNet(nn.Module):
             self.strides = [2, 2, 2, 2, 2]
 
         self.inplanes = 64
+        self.reduction_ratio = reduction_ratio
+        self.kernel_cbam = kernel_cbam
+        self.use_cbam_block = use_cbam_block
+        self.use_cbam_class = use_cbam_class
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -163,6 +180,9 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=self.strides[4],
                                        dilate=replace_stride_with_dilation[2])
+        if self.use_cbam_class:
+            self.cbam = CBAM(n_channels_in=512*block.expansion,
+                             reduction_ratio=reduction_ratio, kernel_size=kernel_cbam)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -220,6 +240,9 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
+        if self.use_cbam_class:
+            out = out + self.cbam(out)
+
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
@@ -230,8 +253,9 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 
-def _resnet(arch, block, layers, pretrained, progress, **kwargs):
-    model = ResNet(block, layers, **kwargs)
+def _resnet(arch, block, layers, pretrained, progress, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
+    model = ResNet(block, layers, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
@@ -239,7 +263,7 @@ def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     return model
 
 
-def resnet18(pretrained=False, progress=True, **kwargs):
+def resnet18(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -247,11 +271,12 @@ def resnet18(pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress,
+    return _resnet('resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class,
                    **kwargs)
 
 
-def resnet34(pretrained=False, progress=True, **kwargs):
+def resnet34(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNet-34 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -259,11 +284,12 @@ def resnet34(pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet34', BasicBlock, [3, 4, 6, 3], pretrained, progress,
+    return _resnet('resnet34', BasicBlock, [3, 4, 6, 3], pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class,
                    **kwargs)
 
 
-def resnet50(pretrained=False, progress=True, **kwargs):
+def resnet50(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNet-50 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -271,11 +297,12 @@ def resnet50(pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress,
+    return _resnet('resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class,
                    **kwargs)
 
 
-def resnet101(pretrained=False, progress=True, **kwargs):
+def resnet101(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNet-101 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -283,11 +310,12 @@ def resnet101(pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet101', Bottleneck, [3, 4, 23, 3], pretrained, progress,
+    return _resnet('resnet101', Bottleneck, [3, 4, 23, 3], pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class,
                    **kwargs)
 
 
-def resnet152(pretrained=False, progress=True, **kwargs):
+def resnet152(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNet-152 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -295,11 +323,12 @@ def resnet152(pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet152', Bottleneck, [3, 8, 36, 3], pretrained, progress,
+    return _resnet('resnet152', Bottleneck, [3, 8, 36, 3], pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class,
                    **kwargs)
 
 
-def resnext50_32x4d(pretrained=False, progress=True, **kwargs):
+def resnext50_32x4d(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNeXt-50 32x4d model from
     `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
 
@@ -310,10 +339,11 @@ def resnext50_32x4d(pretrained=False, progress=True, **kwargs):
     kwargs['groups'] = 32
     kwargs['width_per_group'] = 4
     return _resnet('resnext50_32x4d', Bottleneck, [3, 4, 6, 3],
-                   pretrained, progress, **kwargs)
+                   pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
 
 
-def resnext101_32x8d(pretrained=False, progress=True, **kwargs):
+def resnext101_32x8d(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""ResNeXt-101 32x8d model from
     `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
 
@@ -324,10 +354,11 @@ def resnext101_32x8d(pretrained=False, progress=True, **kwargs):
     kwargs['groups'] = 32
     kwargs['width_per_group'] = 8
     return _resnet('resnext101_32x8d', Bottleneck, [3, 4, 23, 3],
-                   pretrained, progress, **kwargs)
+                   pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
 
 
-def wide_resnet50_2(pretrained=False, progress=True, **kwargs):
+def wide_resnet50_2(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""Wide ResNet-50-2 model from
     `"Wide Residual Networks" <https://arxiv.org/pdf/1605.07146.pdf>`_
 
@@ -342,10 +373,11 @@ def wide_resnet50_2(pretrained=False, progress=True, **kwargs):
     """
     kwargs['width_per_group'] = 64 * 2
     return _resnet('wide_resnet50_2', Bottleneck, [3, 4, 6, 3],
-                   pretrained, progress, **kwargs)
+                   pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
 
 
-def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
+def wide_resnet101_2(pretrained=False, progress=True, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     r"""Wide ResNet-101-2 model from
     `"Wide Residual Networks" <https://arxiv.org/pdf/1605.07146.pdf>`_
 
@@ -360,4 +392,5 @@ def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
     """
     kwargs['width_per_group'] = 64 * 2
     return _resnet('wide_resnet101_2', Bottleneck, [3, 4, 23, 3],
-                   pretrained, progress, **kwargs)
+                   pretrained, progress, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
+                   use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
