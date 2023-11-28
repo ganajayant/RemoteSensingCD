@@ -10,7 +10,7 @@ class DataConfig:
             self.root_dir = r'/home/jayants/LEVIR-CD256'
         elif data_name == 'DSIFN':
             self.label_transform = "norm"
-            self.root_dir = r''
+            self.root_dir = r'/home/jayants/DSIFN-CD-256'
         elif data_name == 'WHU':
             self.label_transform = "norm"
             self.root_dir = ''

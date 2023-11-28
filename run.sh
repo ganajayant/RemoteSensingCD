@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 #GPUs
-gpus=0
+gpus=3
 
 #Set paths
 checkpoint_root=/home/jayants/RemoteSensingCD/checkpoints
 vis_root=/home/jayants/RemoteSensingCD/vis
-data_name=LEVIR
+data_name=DSIFN
 
 img_size=256
 batch_size=16
@@ -22,9 +22,6 @@ loss=ce         #Choices: ce, fl (Focal Loss), miou
 multi_scale_train=True
 multi_scale_infer=False
 shuffle_AB=False
-
-#Initializing from pretrained weights
-pretrain=pretrained_changeformer/pretrained_changeformer.pt
 
 #Train and Validation splits
 split=train    #trainval

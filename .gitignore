@@ -1,4 +1,4 @@
-Dataset Original/
-Dataset Zip/
-Dataset_256/
 .DS_Store
+checkpoints
+vis
+__pycache__

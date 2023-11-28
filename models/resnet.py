@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.model_zoo import load_url as load_state_dict_from_url
 
-from cbam import CBAM
+from models.cbam import CBAM
 # from torchvision.models.utils import load_state_dict_from_url
 
 
@@ -181,6 +181,7 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=self.strides[4],
                                        dilate=replace_stride_with_dilation[2])
         if self.use_cbam_class:
+            print('using cbam')
             self.cbam = CBAM(n_channels_in=512*block.expansion,
                              reduction_ratio=reduction_ratio, kernel_size=kernel_cbam)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -256,10 +257,10 @@ class ResNet(nn.Module):
 def _resnet(arch, block, layers, pretrained, progress, reduction_ratio=1, kernel_cbam=3, use_cbam_block=False, use_cbam_class=False, **kwargs):
     model = ResNet(block, layers, reduction_ratio=reduction_ratio, kernel_cbam=kernel_cbam,
                    use_cbam_block=use_cbam_block, use_cbam_class=use_cbam_class, **kwargs)
-    if pretrained:
-        state_dict = load_state_dict_from_url(model_urls[arch],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
+    # if pretrained:
+    #     state_dict = load_state_dict_from_url(model_urls[arch],
+    #                                           progress=progress)
+    #     model.load_state_dict(state_dict)
     return model
 
 
