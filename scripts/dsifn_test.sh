@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-gpus=3
+gpus=0
 
 data_name=DSIFN
 net_G=base_transformer_pos_s4_dd8

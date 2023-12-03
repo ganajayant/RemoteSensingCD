@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #GPUs
-gpus=3
+gpus=0
 
 #Set paths
 checkpoint_root=/home/jayants/RemoteSensingCD/checkpoints
